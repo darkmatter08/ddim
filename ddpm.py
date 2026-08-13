@@ -346,7 +346,8 @@ def train(
         for step, (images, _) in enumerate(train_loader):
             if max_batches is not None and step >= max_batches:
                 break
-            print(f"step={step}")
+            if step % 50 == 0:
+                print(f"step={step}")
             images = images.to(
                 device, non_blocking=device.type == "cuda"
             )
