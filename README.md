@@ -88,6 +88,37 @@ ps -eo pid,etime,args | grep '[.]venv/bin/python -u ddpm.py train'
 nvidia-smi
 ```
 
+### Sampling while training continues
+
+Before sampling, copy the current checkpoint to a snapshot. The trainer
+rewrites its checkpoint after each epoch; sampling from the snapshot prevents a
+later checkpoint update from changing the file while the sampler is reading it.
+
+```bash
+mkdir -p checkpoints/snapshots outputs .matplotlib-cache
+cp checkpoints/ddpm-100-epochs.pt checkpoints/snapshots/ddpm-sampling.pt
+
+set -o pipefail
+env MPLBACKEND=Agg MPLCONFIGDIR="$PWD/.matplotlib-cache" PYTHONUNBUFFERED=1 \
+  .venv/bin/python -u ddpm.py sample \
+  --device cuda \
+  --checkpoint checkpoints/snapshots/ddpm-sampling.pt \
+  --num-samples 9 \
+  --output outputs/h100-samples-9.png 2>&1 | tee sample-9.log
+```
+
+This writes a grid of nine generated images to
+`outputs/h100-samples-9.png`. It uses the same unbuffered Python and
+pipeline-error settings as the training command. Sampling shares the GPU with
+training, so training may slow briefly while both processes are active.
+
+Check its log and output with:
+
+```bash
+tail -f sample-9.log
+ls -lh outputs/h100-samples-9.png
+```
+
 When finished, leave the virtual environment with:
 
 ```bash
