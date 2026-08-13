@@ -25,6 +25,7 @@ COLS = 28
 TIMESTEPS = 1000
 BETA_START = 1e-4
 BETA_END = 0.02
+SAMPLE_EVERY_EPOCHS = 5
 
 DATA_DIR = Path("data")
 CHECKPOINT_DIR = Path("checkpoints")
@@ -269,13 +270,17 @@ def save_samples(
     return samples
 
 
-def save_learning_curve(losses: list[float], path: Path) -> None:
-    """Save a scatter plot of training loss by optimizer step."""
+def save_learning_curve(epoch_losses: list[float], path: Path) -> None:
+    """Save end-of-epoch training losses on a logarithmic scale."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    plt.scatter(x=range(len(losses)), y=losses)
-    plt.xlabel("step")
-    plt.ylabel("loss")
-    plt.title("Learning Curve")
+    epochs = range(1, len(epoch_losses) + 1)
+    plt.plot(epochs, epoch_losses, marker="o")
+    plt.yscale("log")
+    plt.xlabel("epoch")
+    plt.ylabel("loss (log scale)")
+    plt.title("End-of-Epoch Training Loss")
+    plt.grid(visible=True, which="both", alpha=0.3)
+    plt.tight_layout()
     plt.savefig(path)
     plt.close()
 
@@ -336,13 +341,14 @@ def train(
     train_loader, _ = create_data_loaders(device, batch_size)
     model = build_model(device, timesteps)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    losses: list[float] = []
+    epoch_losses: list[float] = []
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(epochs):
         print(f"epoch={epoch}")
         model.train()
+        epoch_loss: float | None = None
         for step, (images, _) in enumerate(train_loader):
             if max_batches is not None and step >= max_batches:
                 break
@@ -356,12 +362,18 @@ def train(
             loss = model(images)
             loss.backward()
             optimizer.step()
-            losses.append(loss.detach().cpu().item())
+            epoch_loss = loss.detach().cpu().item()
+
+        if epoch_loss is None:
+            raise RuntimeError("training epoch processed no batches")
+        epoch_losses.append(epoch_loss)
 
         save_checkpoint(model, checkpoint)
-        print("Sampling...")
-        save_samples(model, OUTPUT_DIR / f"epoch_{epoch}.png")
-        save_learning_curve(losses, OUTPUT_DIR / "learning_curve.png")
+        save_learning_curve(epoch_losses, OUTPUT_DIR / "learning_curve.png")
+        completed_epochs = epoch + 1
+        if completed_epochs % SAMPLE_EVERY_EPOCHS == 0:
+            print("Sampling...")
+            save_samples(model, OUTPUT_DIR / f"epoch_{completed_epochs}.png")
 
     return model
 
