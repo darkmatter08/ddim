@@ -166,9 +166,14 @@ class DiffusionModel(nn.Module):
         return self.loss_fn(eps, predicted_eps)
 
     def sample(self, method: str = "ddpm", **kwargs) -> torch.Tensor:
-        if method == "ddim":
-            return self.sample_ddim(**kwargs)
-        return self.sample_ddpm(**kwargs)
+        if method == "ddim_skip":
+            print("Sampling with DDIM SKIP")
+            return self.sample_ddim_skip(**kwargs)
+        elif method == "ddim_naive":
+            print("Sampling with DDIM NAIVE")
+            return self.sample_ddim_naive(**kwargs)
+        else:
+            return self.sample_ddpm(**kwargs)
         
     def sample_ddpm(self, batch_size: int = 1) -> torch.Tensor:
         """Generate a batch by iteratively applying the reverse process."""
@@ -196,11 +201,6 @@ class DiffusionModel(nn.Module):
             )
 
         return x_t if batch_size != 1 else x_t.squeeze(0)
-
-    def sample_ddim(self, batch_size: int = 1) -> torch.Tensor:
-        print("Sampling with DDIM")
-        # return self.sample_ddim_naive(batch_size=batch_size)
-        return self.sample_ddim_skip(batch_size=batch_size)
 
     def sample_ddim_skip(self, S: int = 5, eta: float = 1.0, batch_size: int = 1) -> torch.Tensor:
         # 1. Construct the sampling trajectory
@@ -566,7 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
     sample_parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps")
     sample_parser.add_argument("--seed", type=int, default=0)
     sample_parser.add_argument("--output", type=Path, default=OUTPUT_DIR / "samples.png")
-    sample_parser.add_argument("--method", type=str, default="ddpm", choices=["ddpm", "ddim"])
+    sample_parser.add_argument("--method", type=str, default="ddpm", choices=["ddpm", "ddim_skip", "ddim_naive"], help="sampling method to use")
     return parser
 
 
