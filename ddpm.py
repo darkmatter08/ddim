@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
-
 BATCH_SIZE = 512
 EPOCHS = 10
 LEARNING_RATE = 2e-4
@@ -166,7 +165,12 @@ class DiffusionModel(nn.Module):
         predicted_eps = self.eps_model(noisy_images, t)
         return self.loss_fn(eps, predicted_eps)
 
-    def sample(self, batch_size: int = 1) -> torch.Tensor:
+    def sample(self, method: str = "ddpm", **kwargs) -> torch.Tensor:
+        if method == "ddim":
+            return self.sample_ddim(**kwargs)
+        return self.sample_ddpm(**kwargs)
+        
+    def sample_ddpm(self, batch_size: int = 1) -> torch.Tensor:
         """Generate a batch by iteratively applying the reverse process."""
         x_t = torch.normal(
             mean=torch.zeros(
@@ -192,6 +196,102 @@ class DiffusionModel(nn.Module):
             )
 
         return x_t if batch_size != 1 else x_t.squeeze(0)
+
+    def sample_ddim(self, batch_size: int = 1) -> torch.Tensor:
+        print("Sampling with DDIM")
+        # return self.sample_ddim_naive(batch_size=batch_size)
+        return self.sample_ddim_skip(batch_size=batch_size)
+
+    def sample_ddim_skip(self, S: int = 5, eta: float = 1.0, batch_size: int = 1) -> torch.Tensor:
+        # 1. Construct the sampling trajectory
+        # tau_i = floor(i*T / S) for i = 0, 1, ..., S; S is the number of steps
+        tau_i = [math.floor(i * self.timesteps / S) for i in range(S + 1)]
+        # tau_0 = 0
+        tau_i = [0] + tau_i[1:]  # Ensure tau_0 = 0
+
+        # 2. Sample the initial noise
+        # x_T ~ N(0, I)
+        x_t = torch.normal(
+            mean=torch.zeros(
+                batch_size, *self.image_shape, device=self.beta_t.device
+            ),
+            std=1.0,
+        )
+
+        # 3. Iterate through the trajectory and apply the DDIM update rule
+        # for i = S, S-1, ..., 1:
+        for i in range(S, 0, -1):
+            # t := tau_i
+            # s := tau_{i-1}
+            t = tau_i[i]
+            s = tau_i[i - 1]
+
+            # 3a. Pred noise.
+            # eps_hat := eps_model(x_t, t)
+            t_batch = torch.full(
+                (batch_size,), t, device=x_t.device, dtype=torch.long
+            )
+            eps_hat = self.eps_model(x_t, t_batch)
+
+            # 3b. Pred. clean sample estimate
+            # x_0_hat := (x_t - sqrt(1 - alpha_bar_t) * eps_hat) / sqrt(alpha_bar_t)
+            x_0_hat = (x_t - torch.sqrt(1 - self.alpha_bar_t[t]) * eps_hat) / torch.sqrt(self.alpha_bar_t[t])
+
+            # 3c. Compute sigma_ts
+            # sigma_ts := eta * sqrt((1 - alpha_bar_s) / (1 - alpha_bar_t)) * sqrt(1 - alpha_bar_t / alpha_bar_s)
+            sigma_ts = eta * torch.sqrt((1 - self.alpha_bar_t[s]) / (1 - self.alpha_bar_t[t])) * torch.sqrt(1 - self.alpha_bar_t[t] / self.alpha_bar_t[s])
+
+            # 3d. Sample noise; z ~ N(0, I) if s > 1 else z = 0
+            z = torch.randn_like(x_t) if t > 1 else torch.zeros_like(x_t)
+
+            # 3e. Update x_s
+            # x_s := sqrt(alpha_bar_s) * x_0_hat + sqrt(1-alpha_bar_s - sigma_ts**2) * eps_hat + sigma_ts * z
+            x_t = torch.sqrt(self.alpha_bar_t[s]) * x_0_hat + torch.sqrt(1 - self.alpha_bar_t[s] - torch.pow(sigma_ts, 2)) * eps_hat + sigma_ts * z
+
+        return x_t
+
+
+    def sample_ddim_naive(self, batch_size: int = 1) -> torch.Tensor:
+        # Note: DDIM alpha_t = DDPM alpha_bar_t
+        x_t = torch.normal(
+            mean=torch.zeros(
+                batch_size, *self.image_shape, device=self.beta_t.device
+            ),
+            std=1.0,
+        )
+
+        for t in range(self.timesteps, 0, -1):
+            t_batch = torch.full(
+                (batch_size,), t, device=x_t.device, dtype=torch.long
+            )
+            z = torch.randn_like(x_t) if t > 1 else torch.zeros_like(x_t)
+
+            # (12) from DDIM paper
+            # TODO: Change the rest of the sampling strategy
+            
+            # Implement the DDIM version of sigma_t. For now, set it 0.0 to get deterministic sampling.
+            #  σt = sqrt((1−α_s)/(1−α_t)) * sqrt(1−α_t/α_s)   # note this is using DDIM defn of alpha_t
+            sigma_t = torch.sqrt(self.beta_t[t]) # DDPM defn
+            sigma_t = 0.0 # Deterministic Sampling.
+
+            eta = 1.0
+            # Note: x_t -> x_s; s < t; s is the index of the less noisy timestep.
+            sigma_ts = lambda t, s: eta * torch.sqrt((1 - self.alpha_bar_t[s]) / (1 - self.alpha_bar_t[t])) * torch.sqrt(1 - self.alpha_bar_t[t] / self.alpha_bar_t[s])
+
+            x_t = (
+                self.sqrt_alpha_bar_t[t-1]
+                * (
+                    (x_t - torch.sqrt(1 - self.alpha_bar_t[t]) * self.eps_model(x_t, t_batch))
+                    / self.sqrt_alpha_bar_t[t]
+                )
+                + (
+                    torch.sqrt(1 - self.alpha_bar_t[t-1] - sigma_t)
+                    * self.eps_model(x_t, t_batch)
+                )
+                + sigma_t * z
+            )
+
+        return x_t if batch_size != 1 else x_t.squeeze(0) 
 
 
 def create_data_loaders(
@@ -225,7 +325,7 @@ def create_data_loaders(
 
 
 def save_samples(
-    model: DiffusionModel, path: Path, num_samples: int = 2
+    model: DiffusionModel, path: Path, num_samples: int = 2, method: str = "ddpm",
 ) -> torch.Tensor:
     """Generate samples and save them as an image grid."""
     if num_samples <= 0:
@@ -233,7 +333,7 @@ def save_samples(
 
     model.eval()
     with torch.no_grad():
-        samples = model.sample(batch_size=num_samples).detach().cpu()
+        samples = model.sample(batch_size=num_samples, method=method).detach().cpu()
         if samples.ndim == 3:
             samples = samples.unsqueeze(0)
         samples = samples.clamp(-1.0, 1.0)
@@ -386,6 +486,7 @@ def sample_from_checkpoint(
     device_name: str | None = None,
     seed: int = 0,
     output: Path = OUTPUT_DIR / "samples.png",
+    method: str = "ddpm",
 ) -> torch.Tensor:
     """Load a checkpoint, generate samples, and save their image grid."""
     device = select_device(device_name)
@@ -412,7 +513,7 @@ def sample_from_checkpoint(
             f"missing={sorted(missing_parameters)}, "
             f"unexpected={sorted(incompatible.unexpected_keys)}"
         )
-    samples = save_samples(model, output, num_samples=num_samples)
+    samples = save_samples(model, output, num_samples=num_samples, method=method)
     print(f"samples={str(output)!r}")
     return samples
 
@@ -465,6 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
     sample_parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps")
     sample_parser.add_argument("--seed", type=int, default=0)
     sample_parser.add_argument("--output", type=Path, default=OUTPUT_DIR / "samples.png")
+    sample_parser.add_argument("--method", type=str, default="ddpm", choices=["ddpm", "ddim"])
     return parser
 
 
@@ -490,6 +592,7 @@ def main() -> None:
                 device_name=args.device,
                 seed=args.seed,
                 output=args.output,
+                method=args.method,
             )
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         build_parser().error(str(error))
