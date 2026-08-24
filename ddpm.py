@@ -325,7 +325,7 @@ def create_data_loaders(
 
 
 def save_samples(
-    model: DiffusionModel, path: Path, num_samples: int = 2, method: str = "ddpm",
+    model: DiffusionModel, path: Path, num_samples: int = 2, method: str = "ddpm", device: torch.device | None = None,
 ) -> torch.Tensor:
     """Generate samples and save them as an image grid."""
     if num_samples <= 0:
@@ -513,7 +513,7 @@ def sample_from_checkpoint(
             f"missing={sorted(missing_parameters)}, "
             f"unexpected={sorted(incompatible.unexpected_keys)}"
         )
-    samples = save_samples(model, output, num_samples=num_samples, method=method)
+    samples = save_samples(model, output, num_samples=num_samples, method=method, device=device)
     print(f"samples={str(output)!r}")
     return samples
 
