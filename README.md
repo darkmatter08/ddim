@@ -146,7 +146,7 @@ strictly current/future action targets:
 ```python
 from pusht_data import create_pusht_data_loaders
 
-train_loader, val_loader = create_pusht_data_loaders(
+train_loader, val_loader, normalizer = create_pusht_data_loaders(
     "data/pusht/pusht/pusht_cchi_v7_replay.zarr",
     batch_size=64,
     n_obs_steps=2,
@@ -161,7 +161,25 @@ print(batch["obs"]["agent_pos"].shape)  # [B, 2, 2]
 print(batch["action"].shape)             # [B, 16, 2]
 ```
 
+By default, the loaders map agent positions and absolute action coordinates
+from the 512x512 workspace to `[-1, 1]`. They also standardize each RGB channel
+using mean and standard deviation computed from the original frames in training
+episodes only. The same `normalizer` is shared by the training and validation
+datasets and can invert both transformations for rollout and visualization.
+Pass `normalize_coordinates=False` and/or `normalize_images=False` to inspect
+unnormalized data.
+
 For each sample, the final observation is at time `t` and the first returned
 action is `a_t`. `prediction_horizon` controls the training target length.
 Choose how many predicted actions to execute before replanning separately in
 the rollout code.
+
+Before launching a full training run, verify that the model can overfit one
+fixed batch, timestep vector, and epsilon target:
+
+```bash
+python pusht_ddim.py overfit --device cpu --steps 100 --batch-size 2
+```
+
+This writes `pusht_outputs/fixed_batch_overfit.png`. The diagnostic intentionally
+tests memorization and is not an estimate of validation or rollout performance.

@@ -370,16 +370,63 @@ def save_samples(
     return samples
 
 
-def save_learning_curve(epoch_losses: list[float], path: Path) -> None:
-    """Save end-of-epoch training losses on a logarithmic scale."""
+def save_learning_curve(
+    epoch_losses: list[float],
+    path: Path,
+    validation_losses: list[float] | None = None,
+) -> None:
+    """Save mean training and optional validation losses on a logarithmic scale."""
     path.parent.mkdir(parents=True, exist_ok=True)
     epochs = range(1, len(epoch_losses) + 1)
-    plt.plot(epochs, epoch_losses, marker="o")
+    plt.plot(epochs, epoch_losses, marker="o", alpha=0.65, label="epoch loss")
+
+    moving_average_window = 10
+    if len(epoch_losses) >= moving_average_window:
+        moving_average = [
+            sum(epoch_losses[index - moving_average_window:index])
+            / moving_average_window
+            for index in range(moving_average_window, len(epoch_losses) + 1)
+        ]
+        moving_average_epochs = range(
+            moving_average_window, len(epoch_losses) + 1
+        )
+        plt.plot(
+            moving_average_epochs,
+            moving_average,
+            linewidth=2.5,
+            label=f"{moving_average_window}-epoch moving average",
+        )
+
+    if validation_losses is not None:
+        if len(validation_losses) != len(epoch_losses):
+            raise ValueError("training and validation loss histories must align")
+        plt.plot(
+            epochs,
+            validation_losses,
+            marker="x",
+            alpha=0.75,
+            label="validation loss",
+        )
+        if len(validation_losses) >= moving_average_window:
+            validation_moving_average = [
+                sum(validation_losses[index - moving_average_window:index])
+                / moving_average_window
+                for index in range(moving_average_window, len(validation_losses) + 1)
+            ]
+            plt.plot(
+                moving_average_epochs,
+                validation_moving_average,
+                linewidth=2.5,
+                linestyle="--",
+                label=f"validation {moving_average_window}-epoch moving average",
+            )
+
     plt.yscale("log")
     plt.xlabel("epoch")
     plt.ylabel("loss (log scale)")
     plt.title("End-of-Epoch Training Loss")
     plt.grid(visible=True, which="both", alpha=0.3)
+    plt.legend()
     plt.tight_layout()
     plt.savefig(path)
     plt.close()
