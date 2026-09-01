@@ -42,6 +42,8 @@ N_OBS_STEPS = 2
 
 SEED = 42
 OUTPUT_DIR = Path("pusht_outputs")
+CHECKPOINT_DIR = Path("checkpoints")
+CHECKPOINT_PATH = CHECKPOINT_DIR / "pusht_ddim.pt"
 
 
 import sys
@@ -372,40 +374,98 @@ def save_samples(
             "batch_size": images.shape[0],
         }
         samples = model.sample(**args).detach().cpu()
-        if samples.ndim == 3:
-            samples = samples.unsqueeze(0)
-        samples = samples.clamp(-1.0, 1.0)
-        samples = (samples + 1.0) / 2.0
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    columns = math.ceil(math.sqrt(num_samples))
-    rows = math.ceil(num_samples / columns)
-    print(f"Saving {num_samples} samples to {path!r} in a {rows}x{columns} grid...")
-    figure, axes = plt.subplots(
-        rows,
-        columns,
-        figsize=(2.5 * columns, 2.5 * rows),
-        squeeze=False,
-        gridspec_kw={"wspace": 0.08, "hspace": 0.08},
-    )
-    figure.patch.set_facecolor("white")
+    images_cpu = images.detach().cpu()
+    agent_pos_cpu = agent_pos.detach().cpu()
+    if samples.shape != (num_samples, PREDICTION_HORIZON, ACTION_DIM):
+        raise ValueError(
+            "expected sampled actions with shape "
+            f"[{num_samples}, {PREDICTION_HORIZON}, {ACTION_DIM}], "
+            f"got {list(samples.shape)}"
+        )
 
-    for axis in axes.flat:
-        axis.axis("off")
+    # Push-T coordinates are expressed in the original 512x512 workspace,
+    # whereas the policy observations are resized to 96x96.
+    workspace_size = 512.0
+    suffix = path.suffix or ".png"
 
-    for axis, image in zip(axes.flat, samples):
-        if image.shape[0] == 1:
-            axis.imshow(image.squeeze(0), cmap="gray", vmin=0, vmax=1)
-        else:
-            axis.imshow(image.permute(1, 2, 0))
-        axis.axis("on")
-        axis.set(xticks=[], yticks=[])
-        for spine in axis.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(2)
+    for sample_index in range(num_samples):
+        figure, axes = plt.subplots(
+            1,
+            N_OBS_STEPS,
+            figsize=(5.0 * N_OBS_STEPS, 5.0),
+            squeeze=False,
+            gridspec_kw={"wspace": 0.05},
+        )
+        axes = axes[0]
 
-    figure.savefig(path, bbox_inches="tight", pad_inches=0.15, dpi=200)
-    plt.close(figure)
+        for obs_index, axis in enumerate(axes):
+            observation = images_cpu[sample_index, obs_index]
+            height, width = observation.shape[-2:]
+            axis.imshow(observation.permute(1, 2, 0).clamp(0.0, 1.0))
+            axis.set(xticks=[], yticks=[])
+            axis.set_xlim(-0.5, width - 0.5)
+            axis.set_ylim(height - 0.5, -0.5)
+            axis.set_title(f"Observation {obs_index + 1}")
+
+        height, width = images_cpu[sample_index, 0].shape[-2:]
+        coordinate_scale = torch.tensor(
+            [width / workspace_size, height / workspace_size]
+        )
+        pos1, pos2 = agent_pos_cpu[sample_index] * coordinate_scale
+
+        axes[0].scatter(
+            pos1[0], pos1[1], c="red", s=55, edgecolors="white", linewidths=1.0
+        )
+        axes[1].scatter(
+            pos2[0], pos2[1], c="blue", s=55, edgecolors="white", linewidths=1.0
+        )
+
+        action_points = samples[sample_index] * coordinate_scale
+        trajectory = torch.cat((pos2.unsqueeze(0), action_points), dim=0)
+        axes[1].plot(
+            trajectory[:, 0],
+            trajectory[:, 1],
+            color="blue",
+            linewidth=1.5,
+            alpha=0.8,
+        )
+        axes[1].scatter(
+            action_points[:, 0],
+            action_points[:, 1],
+            c="blue",
+            s=12,
+            alpha=0.8,
+        )
+        axes[1].scatter(
+            action_points[0, 0],
+            action_points[0, 1],
+            c="cyan",
+            s=45,
+            edgecolors="blue",
+            linewidths=1.0,
+            zorder=3,
+        )
+        axes[1].annotate(
+            "",
+            xy=tuple(trajectory[-1].tolist()),
+            xytext=tuple(trajectory[-2].tolist()),
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": "blue",
+                "linewidth": 1.5,
+                "alpha": 0.8,
+                "mutation_scale": 12,
+            },
+        )
+
+        output_path = path.with_name(f"{path.stem}_{sample_index:03d}{suffix}")
+        figure.savefig(output_path, bbox_inches="tight", pad_inches=0.15, dpi=200)
+        plt.close(figure)
+
+    print(f"Saved {num_samples} sample visualizations beside {path!r}")
+    return samples
 
 
 def main() -> None:
