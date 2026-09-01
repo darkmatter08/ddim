@@ -3,7 +3,7 @@
 import argparse
 import math
 from pathlib import Path
-from typing import Tuple
+from typing import Callable, Tuple
 
 import matplotlib
 
@@ -406,7 +406,7 @@ def save_checkpoint(model: DiffusionModel, path: Path) -> None:
             "model_state_dict": model.state_dict(),
             "config": {
                 "timesteps": model.timesteps,
-                "image_shape": model.image_shape,
+                "image_shape": model.image_shape if hasattr(model, "image_shape") else None,
                 "beta_start": BETA_START,
                 "beta_end": BETA_END,
             },
@@ -487,6 +487,7 @@ def sample_from_checkpoint(
     seed: int = 0,
     output: Path = OUTPUT_DIR / "samples.png",
     method: str = "ddpm",
+    save_sample_method: Callable = save_samples
 ) -> torch.Tensor:
     """Load a checkpoint, generate samples, and save their image grid."""
     device = select_device(device_name)
@@ -513,7 +514,7 @@ def sample_from_checkpoint(
             f"missing={sorted(missing_parameters)}, "
             f"unexpected={sorted(incompatible.unexpected_keys)}"
         )
-    samples = save_samples(model, output, num_samples=num_samples, method=method, device=device)
+    samples = save_sample_method(model, output, num_samples=num_samples, method=method, device=device)
     print(f"samples={str(output)!r}")
     return samples
 

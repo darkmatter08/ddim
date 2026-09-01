@@ -1,4 +1,4 @@
-"""A small, standalone DDPM implementation for MNIST."""
+"""Conditional DDIM on MNIST. Conditioned on digits 0-9."""
 
 from ddpm import *
 

@@ -128,3 +128,40 @@ deactivate
 The current code preserves the notebook's model and diffusion behavior.
 Corrections that bring its schedule, timestep handling, model, and sampling
 equations in line with the DDPM paper will be made in a subsequent step.
+
+## Push-T data loader
+
+Download and extract Stanford's image Push-T replay from the repository root:
+
+```bash
+mkdir -p data
+curl -L https://diffusion-policy.cs.columbia.edu/data/training/pusht.zip \
+  -o data/pusht.zip
+unzip data/pusht.zip -d data
+```
+
+Then create episode-disjoint loaders that return observation history and
+strictly current/future action targets:
+
+```python
+from pusht_data import create_pusht_data_loaders
+
+train_loader, val_loader = create_pusht_data_loaders(
+    "data/pusht/pusht/pusht_cchi_v7_replay.zarr",
+    batch_size=64,
+    n_obs_steps=2,
+    prediction_horizon=16,
+    val_ratio=0.02,
+    device="cuda",
+)
+
+batch = next(iter(train_loader))
+print(batch["obs"]["image"].shape)      # [B, 2, 3, 96, 96]
+print(batch["obs"]["agent_pos"].shape)  # [B, 2, 2]
+print(batch["action"].shape)             # [B, 16, 2]
+```
+
+For each sample, the final observation is at time `t` and the first returned
+action is `a_t`. `prediction_horizon` controls the training target length.
+Choose how many predicted actions to execute before replanning separately in
+the rollout code.
