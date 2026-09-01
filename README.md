@@ -147,7 +147,7 @@ strictly current/future action targets:
 from pusht_data import create_pusht_data_loaders
 
 train_loader, val_loader, normalizer = create_pusht_data_loaders(
-    "data/pusht/pusht/pusht_cchi_v7_replay.zarr",
+    "data/pusht/pusht_cchi_v7_replay.zarr",
     batch_size=64,
     n_obs_steps=2,
     prediction_horizon=16,

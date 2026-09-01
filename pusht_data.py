@@ -454,7 +454,7 @@ if __name__ == "__main__":
     """Example usage of the Push-T data loader."""
 
     train_loader, val_loader, _ = create_pusht_data_loaders(
-        zarr_path="data/pusht/pusht/pusht_cchi_v7_replay.zarr",
+        zarr_path="data/pusht/pusht_cchi_v7_replay.zarr",
         n_obs_steps=2,
         prediction_horizon=16,
         device="cpu",

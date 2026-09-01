@@ -53,7 +53,7 @@ SEED = 42
 OUTPUT_DIR = Path("pusht_outputs")
 CHECKPOINT_DIR = Path("checkpoints")
 CHECKPOINT_PATH = CHECKPOINT_DIR / "pusht_ddim.pt"
-PUSHT_ZARR_PATH = Path("data/pusht/pusht/pusht_cchi_v7_replay.zarr")
+PUSHT_ZARR_PATH = Path("data/pusht/pusht_cchi_v7_replay.zarr")
 
 
 import sys
