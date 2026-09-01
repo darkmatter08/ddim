@@ -40,6 +40,7 @@ PREDICTION_HORIZON = 16
 # number of observation steps - how many past steps are used as input (frames and agent_pos)
 N_OBS_STEPS = 2
 
+BATCH_SIZE = 64
 SEED = 42
 OUTPUT_DIR = Path("pusht_outputs")
 CHECKPOINT_DIR = Path("checkpoints")
@@ -315,8 +316,8 @@ def train(
         for step, batch in enumerate(train_loader):
             if max_batches is not None and step >= max_batches:
                 break
-            if 1:
-                print(f"step={step}")
+            if step % 25 == 0:
+                print(f"step={step}, loss={epoch_loss}")
             images = batch["obs"]["image"]
             agent_pos = batch["obs"]["agent_pos"]
             actions = batch["action"]
