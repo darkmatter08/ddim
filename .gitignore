@@ -5,6 +5,9 @@ __pycache__/
 venv/
 .matplotlib-cache/
 
+# Download bundles are redundant once their run artifacts are extracted.
+lambda_runs/**/*.tgz
+
 checkpoints/
 data/
 outputs/
