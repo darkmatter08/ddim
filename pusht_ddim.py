@@ -566,6 +566,7 @@ def save_samples(
     batch = next(iter(val_loader))
     images = batch["obs"]["image"].to(device, non_blocking=device.type == "cuda")
     agent_pos = batch["obs"]["agent_pos"].to(device, non_blocking=device.type == "cuda")
+    ground_truth_actions = batch["action"]
 
     num_samples: int = images.shape[0]
 
@@ -582,11 +583,20 @@ def save_samples(
     images_cpu = normalizer.unnormalize_images(images.detach().cpu())
     agent_pos_cpu = normalizer.unnormalize_coordinates(agent_pos.detach().cpu())
     action_samples_cpu = normalizer.unnormalize_coordinates(samples)
+    ground_truth_actions_cpu = normalizer.unnormalize_coordinates(
+        ground_truth_actions.detach().cpu()
+    )
     if samples.shape != (num_samples, PREDICTION_HORIZON, ACTION_DIM):
         raise ValueError(
             "expected sampled actions with shape "
             f"[{num_samples}, {PREDICTION_HORIZON}, {ACTION_DIM}], "
             f"got {list(samples.shape)}"
+        )
+    if ground_truth_actions.shape != samples.shape:
+        raise ValueError(
+            "expected ground-truth actions to match sampled actions, "
+            f"got ground truth {list(ground_truth_actions.shape)} and "
+            f"samples {list(samples.shape)}"
         )
 
     # Push-T coordinates are expressed in the original 512x512 workspace,
@@ -639,6 +649,7 @@ def save_samples(
             color="blue",
             linewidth=1.5,
             alpha=0.8,
+            label="prediction",
         )
         axes[1].scatter(
             action_points[:, 0],
@@ -668,6 +679,44 @@ def save_samples(
                 "mutation_scale": 12,
             },
         )
+
+        ground_truth_points = (
+            ground_truth_actions_cpu[sample_index] - workspace_lower
+        ) * coordinate_scale
+        ground_truth_trajectory = torch.cat(
+            (pos2.unsqueeze(0), ground_truth_points), dim=0
+        )
+        axes[1].plot(
+            ground_truth_trajectory[:, 0],
+            ground_truth_trajectory[:, 1],
+            color="green",
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.8,
+            label="ground truth",
+        )
+        axes[1].scatter(
+            ground_truth_points[:, 0],
+            ground_truth_points[:, 1],
+            c="green",
+            marker="x",
+            s=18,
+            alpha=0.8,
+        )
+        axes[1].annotate(
+            "",
+            xy=tuple(ground_truth_trajectory[-1].tolist()),
+            xytext=tuple(ground_truth_trajectory[-2].tolist()),
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": "green",
+                "linestyle": "--",
+                "linewidth": 1.5,
+                "alpha": 0.8,
+                "mutation_scale": 12,
+            },
+        )
+        axes[1].legend(loc="upper right")
 
         output_path = path.with_name(f"{path.stem}_{sample_index:03d}{suffix}")
         figure.savefig(output_path, bbox_inches="tight", pad_inches=0.15, dpi=200)
