@@ -649,7 +649,7 @@ def save_samples(
             color="blue",
             linewidth=1.5,
             alpha=0.8,
-            label="prediction",
+            label="prediction horizon",
         )
         axes[1].scatter(
             action_points[:, 0],
@@ -662,22 +662,35 @@ def save_samples(
             action_points[0, 0],
             action_points[0, 1],
             c="cyan",
-            s=45,
+            marker="o",
+            s=60,
             edgecolors="blue",
-            linewidths=1.0,
-            zorder=3,
+            linewidths=1.5,
+            zorder=5,
+            label="prediction: first action",
         )
         axes[1].annotate(
             "",
-            xy=tuple(trajectory[-1].tolist()),
-            xytext=tuple(trajectory[-2].tolist()),
+            xy=tuple(action_points[0].tolist()),
+            xytext=tuple(pos2.tolist()),
             arrowprops={
                 "arrowstyle": "-|>",
                 "color": "blue",
-                "linewidth": 1.5,
-                "alpha": 0.8,
-                "mutation_scale": 12,
+                "linewidth": 2.5,
+                "alpha": 1.0,
+                "mutation_scale": 16,
             },
+            zorder=4,
+        )
+        axes[1].annotate(
+            "P1",
+            xy=tuple(action_points[0].tolist()),
+            xytext=(6, -12),
+            textcoords="offset points",
+            color="blue",
+            fontsize=8,
+            fontweight="bold",
+            zorder=6,
         )
 
         ground_truth_points = (
@@ -693,7 +706,7 @@ def save_samples(
             linestyle="--",
             linewidth=1.5,
             alpha=0.8,
-            label="ground truth",
+            label="ground-truth horizon",
         )
         axes[1].scatter(
             ground_truth_points[:, 0],
@@ -703,18 +716,40 @@ def save_samples(
             s=18,
             alpha=0.8,
         )
+        axes[1].scatter(
+            ground_truth_points[0, 0],
+            ground_truth_points[0, 1],
+            c="lime",
+            marker="X",
+            s=70,
+            edgecolors="darkgreen",
+            linewidths=1.2,
+            zorder=5,
+            label="ground truth: first action",
+        )
         axes[1].annotate(
             "",
-            xy=tuple(ground_truth_trajectory[-1].tolist()),
-            xytext=tuple(ground_truth_trajectory[-2].tolist()),
+            xy=tuple(ground_truth_points[0].tolist()),
+            xytext=tuple(pos2.tolist()),
             arrowprops={
                 "arrowstyle": "-|>",
-                "color": "green",
+                "color": "darkgreen",
                 "linestyle": "--",
-                "linewidth": 1.5,
-                "alpha": 0.8,
-                "mutation_scale": 12,
+                "linewidth": 2.5,
+                "alpha": 1.0,
+                "mutation_scale": 16,
             },
+            zorder=4,
+        )
+        axes[1].annotate(
+            "GT1",
+            xy=tuple(ground_truth_points[0].tolist()),
+            xytext=(6, 8),
+            textcoords="offset points",
+            color="darkgreen",
+            fontsize=8,
+            fontweight="bold",
+            zorder=6,
         )
         axes[1].legend(loc="upper right")
 
